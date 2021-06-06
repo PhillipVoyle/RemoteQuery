@@ -601,26 +601,26 @@ namespace PhillipVoyle.RemoteQuery
         }
         public Expression BuildFilterExpression(SerialisableExpression ex, Expression root)
         {
-            var whereMethods = typeof(Queryable).GetMethods(BindingFlags.Static | BindingFlags.Public)
-                .Where(mi => mi.Name == "Where").ToArray();
-            var whereMethod = whereMethods
-                .First(mi => mi.Name == "Where" && mi.IsGenericMethodDefinition && mi.GetParameters().Length == 2)
-                .MakeGenericMethod(typeof(T));
-
             var whereParameter = BuildExpression(ex);
+            var whereMethod = typeof(Queryable).GetMethods(BindingFlags.Static | BindingFlags.Public)
+                .Where(mi => mi.Name == "Where")
+                .SelectMany(method => CheckParameters(method, new Type[] { root.Type, whereParameter.Type }))
+                .First();
+
             return Expression.Call((Expression)null, whereMethod, root, whereParameter);
         }
         public Expression DeserialiseCountQuery(CountQuery cq, IQueryable<T> root)
         {
-            var countMethod = typeof(Queryable).GetMethods(BindingFlags.Static | BindingFlags.Public)
-                .Single(mi => mi.Name == "Count" && mi.IsGenericMethodDefinition && mi.GetParameters().Length == 1)
-                .MakeGenericMethod(typeof(T));
-
-            var expr = (Expression)Expression.Constant(root);
+            var expr = (Expression)Expression.Constant(root, typeof(IQueryable<T>));
             if (cq.FilterBy != null)
             {
                 expr = BuildFilterExpression(cq.FilterBy, expr);
             }
+
+            var countMethod = typeof(Queryable).GetMethods(BindingFlags.Static | BindingFlags.Public)
+                .Where(mi => mi.Name == "Count")
+                .SelectMany(method => CheckParameters(method, new Type[] { expr.Type }))
+                .First();
 
             return Expression.Call((Expression)null, countMethod, expr);
         }
