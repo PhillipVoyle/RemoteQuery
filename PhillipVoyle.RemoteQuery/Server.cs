@@ -176,14 +176,13 @@ namespace PhillipVoyle.RemoteQuery
                 var gT = genericType.GetGenericArguments()[genericParameter];
                 var aT = specificArgs[genericParameter];
 
-                return UnifyType(scope, gT, aT,
+                return UnifyTypeAndBaseClasses(scope, gT, aT,
                     scope => UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation));
             }
         }
 
         public IEnumerable<MethodInfo> UnifyType(GenericScope scope, Type tGeneric, Type tSpecific, Func<GenericScope, IEnumerable<MethodInfo>> continuation)
         {
-
             if (tGeneric.IsGenericMethodParameter)
             {
                 if (scope.TryGetValue(tGeneric, out Type unifiedType))
@@ -206,7 +205,6 @@ namespace PhillipVoyle.RemoteQuery
                     }
                     else
                     {
-                        //todo: unify implemented types?
                         return Enumerable.Empty<MethodInfo>();
                     }
                 }
@@ -228,7 +226,16 @@ namespace PhillipVoyle.RemoteQuery
 
             return Enumerable.Empty<MethodInfo>();
         }
+        public IEnumerable<MethodInfo> UnifyTypeAndBaseClasses(GenericScope scope, Type tGeneric, Type tSpec, Func<GenericScope, IEnumerable<MethodInfo>> continuation)
+        {
+            var typesToCheck = new Type[] { tSpec }.Union(tSpec.GetInterfaces()).Distinct();
 
+            return typesToCheck.SelectMany(tSpecific =>
+            {
+                GenericScope newScope = new GenericScope(scope);
+                return UnifyType(newScope, tGeneric, tSpecific, continuation);
+            });
+        }
         public IEnumerable<MethodInfo> UnifyMethodParameters(GenericScope scope, int nParameter, MethodInfo method, Type[] argTypes)
         {
             if (nParameter == argTypes.Length)
@@ -257,7 +264,7 @@ namespace PhillipVoyle.RemoteQuery
                 var parameter = method.GetParameters()[nParameter];
                 var parameterType = parameter.ParameterType;
                 var argumentType = argTypes[nParameter];
-                return UnifyType(scope, parameterType, argumentType, scope => UnifyMethodParameters(scope, nParameter + 1, method, argTypes));
+                return UnifyTypeAndBaseClasses(scope, parameterType, argumentType, scope => UnifyMethodParameters(scope, nParameter + 1, method, argTypes));
             }
             
         }
@@ -480,7 +487,7 @@ namespace PhillipVoyle.RemoteQuery
         }
         public Expression DeserialiseCountQuery(CountQuery cq, IQueryable<T> root)
         {
-            var expr = (Expression)Expression.Constant(root, typeof(IQueryable<T>));
+            var expr = (Expression)Expression.Constant(root);
             if (cq.FilterBy != null)
             {
                 expr = BuildFilterExpression(cq.FilterBy, expr);
@@ -517,7 +524,7 @@ namespace PhillipVoyle.RemoteQuery
 
         public Expression DeserialiseSortFilterPageQuery(SortFilterPageQuery sfpq, IQueryable<T> root)
         {
-            Expression expr = Expression.Constant(root, typeof(IQueryable<T>));
+            Expression expr = Expression.Constant(root);
             if (sfpq.FilterBy != null)
             {
                 expr = BuildFilterExpression(sfpq.FilterBy, expr);
