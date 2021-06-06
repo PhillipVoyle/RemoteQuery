@@ -36,15 +36,30 @@ namespace PhillipVoyle.RemoteQuery.Tests
             };
         }
 
-        [Fact]
-        public void Test1()
+        IQueryable<TestData> GetNewQuery()
         {
-            var testDataQuery = new QueryableProvider<TestData>(new QueryableExector<TestData>(TestData.AsQueryable())).NewQuery();
+            return new QueryableProvider<TestData>(new QueryableExecutor<TestData>(TestData.AsQueryable())).NewQuery();
+        }
+
+        [Fact]
+        public void SimpleTestCountMatches()
+        {
+
+            var testDataQuery = GetNewQuery();
             var query1 = testDataQuery.Where(x => x.TestProperty3.Contains(19));
             var count = query1.Count();
 
             var array = query1.ToArray();
             Assert.Equal(array.Count(), count);
+        }
+
+        [Fact]
+        public void FilterBySubstring()
+        {
+            var testDataQuery = GetNewQuery();
+            var data = testDataQuery.Where(t => t.TestProperty1.ToLower().Contains("est")).ToArray();
+
+            Assert.True(data.Length == 2);
         }
     }
 }

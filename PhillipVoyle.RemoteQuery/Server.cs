@@ -233,7 +233,7 @@ namespace PhillipVoyle.RemoteQuery
             return filteredMethods;
         }
 
-        public MethodInfo FindExtensionMethod(Type[] ts, string methodName, int parameterCount)
+        public MethodInfo FindExtensionMethod(Type[] ts, string methodName)
         {
             var extensionMethods = FindExtensionMethods(ts, methodName);
             var extensionMethod = extensionMethods.First();
@@ -301,15 +301,22 @@ namespace PhillipVoyle.RemoteQuery
                         if (expressions[0] == null)
                         {
                             var parameterType = expressions[1].Type;
-                            method = FindExtensionMethod(expressions.Skip(1).Select(x => x.Type).ToArray(), expr.Name, expressions.Length - 1); //todo: parameter check
+                            method = FindExtensionMethod(expressions.Skip(1).Select(x => x.Type).ToArray(), expr.Name); //todo: parameter check
+
+                            return Expression.Call(expressions[0], method, expressions.Skip(1).ToArray());
                         }
                         else
                         {
                             var methods = expressions[0].Type.GetMethods().Where(x => x.Name == expr.Name).ToArray();
                             method = methods.FirstOrDefault(); //TODO: parameter check
+
+                            var arguments = expressions.Skip(1);
+
+                            method = methods.SelectMany(x => CheckParameters(x, arguments.Select(arg => arg.Type).ToArray())).Single();
+
+                            return Expression.Call(expressions[0], method, expressions.Skip(1).ToArray());
                         }
 
-                        return Expression.Call(expressions[0], method, expressions.Skip(1).ToArray());
                     }
                 case ExpressionType.Conditional:
                     {
@@ -477,9 +484,9 @@ namespace PhillipVoyle.RemoteQuery
         }
     };
 
-    public class QueryableExector<T> : IQueryEndpoint<T>
+    public class QueryableExecutor<T> : IQueryEndpoint<T>
     {
-        public QueryableExector(IQueryable<T> queryable)
+        public QueryableExecutor(IQueryable<T> queryable)
         {
             Queryable = queryable;
             QueryableDeserialiser = new QueryableDeserialiser<T>();
