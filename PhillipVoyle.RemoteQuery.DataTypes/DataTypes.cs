@@ -402,8 +402,10 @@ namespace PhillipVoyle.RemoteQuery.DataTypes
     public class SerialisableExpression
     {
         public SerialisableExpressionType ExpressionType { get; set; }
-        public object ExpressionData { get; set; }
-        public IEnumerable<SerialisableExpression> Expressions { get; set; }
+        public object Value { get; set; }
+        public string Name { get; set; }
+        public string TypeName { get; set; }
+        public SerialisableExpression[] Expressions { get; set; }
     };
 
     public class CountQuery

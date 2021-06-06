@@ -148,6 +148,7 @@ namespace PhillipVoyle.RemoteQuery
                         var binary = (BinaryExpression) expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = new SerialisableExpression[]
                             {
@@ -166,6 +167,7 @@ namespace PhillipVoyle.RemoteQuery
                         var unary = (UnaryExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = new SerialisableExpression[]
                             {
@@ -178,13 +180,14 @@ namespace PhillipVoyle.RemoteQuery
                         var methodCall = (MethodCallExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
+                            Name = methodCall.Method.Name,
                             ExpressionType = type,
                             Expressions = new SerialisableExpression[]
                             {
                                 ToSerialisableExpression(methodCall.Object)
                             }.Union(methodCall.Arguments.Select(ToSerialisableExpression))
-                            .ToArray(),
-                            ExpressionData = methodCall.Method.Name
+                            .ToArray()
                         };
                     }
                 case ExpressionType.Conditional:
@@ -192,6 +195,7 @@ namespace PhillipVoyle.RemoteQuery
                         var conditional = (ConditionalExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = new SerialisableExpression[]
                             {
@@ -206,8 +210,9 @@ namespace PhillipVoyle.RemoteQuery
                         var constant = (ConstantExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
-                            ExpressionData = constant.Value
+                            Value = constant.Value
                         };
                     }
                 case ExpressionType.Invoke:
@@ -215,6 +220,7 @@ namespace PhillipVoyle.RemoteQuery
                         var invoke = (InvocationExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = new Expression[] { invoke.Expression }
                                 .Union(invoke.Arguments)
@@ -226,6 +232,7 @@ namespace PhillipVoyle.RemoteQuery
                         var lambda = (LambdaExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = lambda.Parameters
                                 .Union(new Expression[] {lambda.Body})
@@ -237,6 +244,7 @@ namespace PhillipVoyle.RemoteQuery
                         var listInit = (ListInitExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions =
                                 new SerialisableExpression[]
@@ -245,11 +253,12 @@ namespace PhillipVoyle.RemoteQuery
                                 }.Union(listInit.Initializers.Select(init =>
                                     new SerialisableExpression
                                     {
-                                        ExpressionData = init.AddMethod?.Name,
+                                        TypeName = expr.Type.Name,
+                                        Name = init.AddMethod?.Name,
                                         ExpressionType = SerialisableExpressionType.Call,
-                                        Expressions = init.Arguments.Select(ToSerialisableExpression)
+                                        Expressions = init.Arguments.Select(ToSerialisableExpression).ToArray()
                                     })).ToArray(),
-                            ExpressionData = listInit.Type.Name
+                            Name = listInit.Type.Name
                         };
                     }
                 case ExpressionType.MemberAccess:
@@ -257,12 +266,13 @@ namespace PhillipVoyle.RemoteQuery
                         var memberAccess = (MemberExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = new SerialisableExpression []
                             {
                                ToSerialisableExpression(memberAccess.Expression)
                             },
-                            ExpressionData = memberAccess.Member.Name
+                            Name = memberAccess.Member.Name
                         };
                     }
                 case ExpressionType.MemberInit:
@@ -270,14 +280,16 @@ namespace PhillipVoyle.RemoteQuery
                         var memberInit = (MemberInitExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = new SerialisableExpression[]
                             {
                                 ToSerialisableExpression(memberInit.NewExpression)
                             }.Union(memberInit.Bindings.Select(binding => new SerialisableExpression
                             {
+                                TypeName = binding.Member.DeclaringType.Name,
                                 ExpressionType = SerialisableExpressionType.MemberInit,
-                                ExpressionData = binding.Member.Name
+                                Name = binding.Member.Name
                             })).ToArray()
                         };
                     }
@@ -286,20 +298,22 @@ namespace PhillipVoyle.RemoteQuery
                         var newExpression = (NewExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = new SerialisableExpression[] {
                                 new SerialisableExpression
                                 {
+                                    Name = "Members",
                                     ExpressionType = SerialisableExpressionType.New,
                                     Expressions = newExpression.Members.Select(x =>
                                         new SerialisableExpression{
+                                            TypeName = x.DeclaringType.Name,
                                             ExpressionType = SerialisableExpressionType.MemberInit,
-                                            ExpressionData = x.Name
+                                            Name = x.Name
                                         }).ToArray()
                                 }
                             }.Union(newExpression.Arguments.Select(ToSerialisableExpression))
                             .ToArray(),
-                            ExpressionData = newExpression.Type.Name
                         };
                     }
                 case ExpressionType.NewArrayInit:
@@ -308,9 +322,9 @@ namespace PhillipVoyle.RemoteQuery
                         var newArrayInit = (NewArrayExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = newArrayInit.Expressions.Select(ToSerialisableExpression).ToArray(),
-                            ExpressionData = newArrayInit.Type.Name
                         };
                     }
                 case ExpressionType.Parameter:
@@ -318,8 +332,9 @@ namespace PhillipVoyle.RemoteQuery
                         var parameter = (ParameterExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
-                            ExpressionData = parameter.Name
+                            Name = parameter.Name
                         };
                     }
                 case ExpressionType.TypeIs:
@@ -327,9 +342,9 @@ namespace PhillipVoyle.RemoteQuery
                         var typeIs = (TypeBinaryExpression)expr;
                         return new SerialisableExpression
                         {
+                            TypeName = expr.Type.Name,
                             ExpressionType = type,
                             Expressions = new SerialisableExpression[] { ToSerialisableExpression(typeIs.Expression) },
-                            ExpressionData = typeIs.TypeOperand.Name
                         };
                     }
                 default:

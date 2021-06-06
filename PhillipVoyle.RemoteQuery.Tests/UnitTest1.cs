@@ -15,26 +15,35 @@ namespace PhillipVoyle.RemoteQuery.Tests
         public IEnumerable<int> TestProperty3 { get; set; }
     };
 
-    public class UnitTest1 : IQueryEndpoint<TestData>
+    public class UnitTest1
     {
-
-        public int ExecuteCountQuery(CountQuery cq)
+        TestData [] TestData { get; set; }
+        public UnitTest1()
         {
-            return 0;
-        }
-
-        public IEnumerable<TestData> ExecuteSortFilterPageQuery(SortFilterPageQuery sfpq)
-        {
-            return new TestData[] { };
+            TestData = new TestData[] {
+                new TestData
+                {
+                    TestProperty1 = "Test1",
+                    TestProperty2 = 12,
+                    TestProperty3 = new int[] {35, 66, 2567}
+                },
+                new TestData
+                {
+                    TestProperty1 = "Test2",
+                    TestProperty2 = 76789,
+                    TestProperty3 = new int[] {35, 18, 19}
+                }
+            };
         }
 
         [Fact]
         public void Test1()
         {
-            var testDataQuery = new QueryableProvider<TestData>(this).NewQuery();
+            var testDataQuery = new QueryableProvider<TestData>(new QueryableExector<TestData>(TestData.AsQueryable())).NewQuery();
             var query1 = testDataQuery.Where(x => x.TestProperty3.Contains(19));
+            var count = query1.Count();
+
             var array = query1.ToArray();
-            var count = testDataQuery.Count();
             Assert.Equal(array.Count(), count);
         }
     }
