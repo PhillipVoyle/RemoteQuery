@@ -427,9 +427,53 @@ namespace PhillipVoyle.RemoteQuery
             return Expression.Call((Expression)null, countMethod, expr);
         }
 
+        public Expression BuildOrderByExpression(SortExpression sortExpression, Expression expr)
+        {
+            string name = "OrderBy";
+
+            if (sortExpression.SortOrder == OrderByDirection.Descending)
+            {
+                name = "OrderByDescending";
+            }
+
+            var orderByParameter = BuildExpression(sortExpression.SortSelector);
+
+            var orderByMethods = typeof(Queryable).GetMethods(BindingFlags.Static | BindingFlags.Public)
+                .Where(mi => mi.Name == name).ToArray();
+            var orderByMethod = orderByMethods
+                .First(mi => mi.IsGenericMethodDefinition && mi.GetParameters().Length == 2)
+                .MakeGenericMethod(new Type[] { typeof(T), orderByParameter.Type });
+
+            return Expression.Call((Expression)null, orderByMethod, expr, orderByParameter);
+        }
+
         public Expression DeserialiseSortFilterPageQuery(SortFilterPageQuery sfpq, IQueryable<T> root)
         {
-            throw new NotImplementedException();
+            Expression expr = Expression.Constant(root);
+            if (sfpq.FilterBy != null)
+            {
+                expr = BuildFilterExpression(sfpq.FilterBy, expr);
+            }
+            if (sfpq.OrderBy != null)
+            {
+                expr = BuildOrderByExpression(sfpq.OrderBy, expr);
+            }
+            if (sfpq.SkipCount != null)
+            {
+                var skipMethod = typeof(Queryable).GetMethods(BindingFlags.Static | BindingFlags.Public)
+                    .Single(mi => mi.Name == "Skip" && mi.IsGenericMethodDefinition && mi.GetParameters().Length == 2)
+                    .MakeGenericMethod(typeof(T));
+                expr = Expression.Call((Expression)null, skipMethod, expr, Expression.Constant(sfpq.SkipCount));
+            }
+            if (sfpq.TakeCount != null)
+            {
+                var takeMethod = typeof(Queryable).GetMethods(BindingFlags.Static | BindingFlags.Public)
+                    .Single(mi => mi.Name == "Take" && mi.IsGenericMethodDefinition && mi.GetParameters().Length == 2)
+                    .MakeGenericMethod(typeof(T));
+                expr = Expression.Call((Expression)null, takeMethod, expr, Expression.Constant(sfpq.TakeCount));
+            }
+
+            return expr;
         }
     };
 
