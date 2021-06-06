@@ -52,6 +52,62 @@ namespace PhillipVoyle.RemoteQuery
         }
     };
 
+    public class GenericScope
+    {
+        Dictionary<Type, Type> unifiedTypes;
+        GenericScope parentScope = null;
+
+        public GenericScope(GenericScope p)
+        {
+            parentScope = p;
+            unifiedTypes = new Dictionary<Type, Type>();
+        }
+        public bool ContainsKey(Type genericType)
+        {
+            if (unifiedTypes.ContainsKey(genericType))
+            {
+                return true;
+            }
+            if (parentScope != null)
+            {
+                return parentScope.ContainsKey(genericType);
+            }
+            return false;
+        }
+
+        public Type GetValue(Type genericType)
+        {
+            if (TryGetValue(genericType, out Type specificType))
+            {
+                return specificType;
+            }
+            throw new KeyNotFoundException();
+        }
+        public bool TryGetValue(Type genericType, out Type specificType)
+        {
+            if (unifiedTypes.TryGetValue(genericType, out  specificType))
+            {
+                return true;
+            }
+
+            if (parentScope != null && parentScope.TryGetValue(genericType, out specificType))
+            {
+                return true;
+            }
+            return false;
+        }
+        public bool TryUnifyType(Type genericType, Type specificType)
+        {
+            if (TryGetValue(genericType, out Type storedType))
+            {
+                return specificType == storedType;
+            }
+
+            unifiedTypes[genericType] = specificType;
+            return true;
+        }
+    };
+
     public class QueryableDeserialiser<T> : IQueryableDeserialiser<T>
     {
         Scope currentScope = null;
@@ -108,16 +164,150 @@ namespace PhillipVoyle.RemoteQuery
         {
             throw new NotImplementedException();
         }
+
+        public IEnumerable<MethodInfo> UnifyGenericParameters(GenericScope scope, Type genericType, int genericParameter, Type[] specificArgs, Func<GenericScope, IEnumerable<MethodInfo>> continuation)
+        {
+            if (genericParameter == genericType.GetGenericArguments().Length)
+            {
+                return continuation(scope);
+            }
+            else
+            {
+                var gT = genericType.GetGenericArguments()[genericParameter];
+                var aT = specificArgs[genericParameter];
+
+                if (gT.IsGenericMethodParameter)
+                {
+                    if (scope.TryGetValue(gT, out Type unifiedType))
+                    {
+                        if (unifiedType.IsAssignableFrom(aT))
+                        {
+                            return UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation);
+                        }
+                        else
+                        {
+                            return Enumerable.Empty<MethodInfo>();
+                        }
+                    }
+                    else
+                    {
+                        if (scope.TryUnifyType(gT, aT))
+                        {
+                            return UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation);
+                        }
+                        else
+                        {
+                            //todo: unify implemented types?
+                            return Enumerable.Empty<MethodInfo>();
+                        }
+                    }
+                }
+                else if (gT.IsAssignableFrom(aT))
+                {
+                    return UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation);
+                }
+                else if (gT.ContainsGenericParameters)
+                {
+                    if (gT.Name != aT.Name)
+                        return Enumerable.Empty<MethodInfo>();
+
+                    if (gT.GetGenericArguments().Length != aT.GetGenericArguments().Length)
+                        return Enumerable.Empty<MethodInfo>();
+
+                    return UnifyGenericParameters(scope, gT, 0, aT.GetGenericArguments(),
+                        (GenericScope s) => UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation));
+                }
+                else
+                {
+                    return Enumerable.Empty<MethodInfo>();
+                }
+            }
+        }
+
+        public IEnumerable<MethodInfo> UnifyMethodParameters(GenericScope scope, int nParameter, MethodInfo method, Type[] argTypes)
+        {
+            if (nParameter == argTypes.Length)
+            {
+                var genericArguments = method.GetGenericArguments();
+                if (genericArguments.Length == 0)
+                {
+                    return new MethodInfo[] { method };
+                }
+                else
+                {
+                    foreach (var genericArgument in genericArguments)
+                    {
+                        if (!scope.ContainsKey(genericArgument))
+                        {
+                            return Enumerable.Empty<MethodInfo>();
+                        }
+                    }
+
+                    var genericMethod = method.MakeGenericMethod(genericArguments.Select(arg => scope.GetValue(arg)).ToArray());
+                    return new MethodInfo[] { genericMethod };
+                }
+            }
+            else
+            {
+                var parameter = method.GetParameters()[nParameter];
+                var parameterType = parameter.ParameterType;
+                var argumentType = argTypes[nParameter];
+                if (parameter.ParameterType.IsGenericMethodParameter)
+                {
+                    if (scope.TryGetValue(parameterType, out Type unifiedType))
+                    {
+                        if (unifiedType.IsAssignableFrom(argumentType))
+                        {
+                            return UnifyMethodParameters(scope, nParameter + 1, method, argTypes);
+                        }
+                        else
+                        {
+                            return Enumerable.Empty<MethodInfo>();
+                        }
+                    }
+                    else
+                    {
+                        if (scope.TryUnifyType(parameterType, argumentType))
+                        {
+                            return UnifyMethodParameters(scope, nParameter + 1, method, argTypes);
+                        }
+                        else
+                        {
+                            //todo: unify implemented types?
+                            return Enumerable.Empty<MethodInfo>();
+                        }
+                    }
+                }
+                else if(parameter.ParameterType.IsAssignableFrom(argumentType))
+                {
+                    return UnifyMethodParameters(scope, nParameter + 1, method, argTypes);
+                }
+                else if (parameterType.ContainsGenericParameters)
+                {
+                    if (parameterType.Name != argumentType.Name)
+                        return Enumerable.Empty<MethodInfo>();
+
+                    if (parameterType.GetGenericArguments().Length != argumentType.GetGenericArguments().Length)
+                        return Enumerable.Empty<MethodInfo>();
+
+                    return UnifyGenericParameters(scope, parameterType, 0, argumentType.GetGenericArguments(),
+                        (GenericScope s) => UnifyMethodParameters(scope, nParameter + 1, method, argTypes));
+                }
+            }
+
+            return Enumerable.Empty<MethodInfo>();
+        }
         public IEnumerable<MethodInfo> CheckParameters(MethodInfo method, Type[] argumentTypes)
         {
-            var genericArguments = method.GetGenericArguments();
             var methodParameters = method.GetParameters();
 
             if (methodParameters.Length != argumentTypes.Length)
                 return Enumerable.Empty<MethodInfo>();
 
-            Dictionary<Type, Type> unifiedParameters = new Dictionary<Type, Type>();
-            
+            GenericScope genericScope = new GenericScope(null);
+            return UnifyMethodParameters(genericScope, 0, method, argumentTypes);
+        }
+        /*
             for(int nParameter = 0; nParameter < methodParameters.Length; nParameter ++)
             {
                 var parameter = methodParameters[nParameter];
@@ -211,6 +401,7 @@ namespace PhillipVoyle.RemoteQuery
                 return new MethodInfo[] { genericMethod };
             }
         }
+        */
 
         public MethodInfo[] FindExtensionMethods(Type[] parameterTypes, string methodName)
         {
@@ -446,17 +637,18 @@ namespace PhillipVoyle.RemoteQuery
             var orderByParameter = BuildExpression(sortExpression.SortSelector);
 
             var orderByMethods = typeof(Queryable).GetMethods(BindingFlags.Static | BindingFlags.Public)
-                .Where(mi => mi.Name == name).ToArray();
-            var orderByMethod = orderByMethods
-                .First(mi => mi.IsGenericMethodDefinition && mi.GetParameters().Length == 2)
-                .MakeGenericMethod(new Type[] { typeof(T), orderByParameter.Type });
+                .Where(mi => mi.Name == name)
+                .SelectMany(method => CheckParameters(method, new Type[] { expr.Type, orderByParameter.Type }))
+                .ToArray();
 
+
+            var orderByMethod = orderByMethods.First();
             return Expression.Call((Expression)null, orderByMethod, expr, orderByParameter);
         }
 
         public Expression DeserialiseSortFilterPageQuery(SortFilterPageQuery sfpq, IQueryable<T> root)
         {
-            Expression expr = Expression.Constant(root);
+            Expression expr = Expression.Constant(root, typeof(IQueryable<T>));
             if (sfpq.FilterBy != null)
             {
                 expr = BuildFilterExpression(sfpq.FilterBy, expr);

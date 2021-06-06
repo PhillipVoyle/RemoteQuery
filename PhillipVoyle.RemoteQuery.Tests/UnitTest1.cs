@@ -32,6 +32,12 @@ namespace PhillipVoyle.RemoteQuery.Tests
                     TestProperty1 = "Test2",
                     TestProperty2 = 76789,
                     TestProperty3 = new int[] {35, 18, 19}
+                },
+                new TestData
+                {
+                    TestProperty1 = "Coronary",
+                    TestProperty2 = 8921,
+                    TestProperty3 = new int[] {22}
                 }
             };
         }
@@ -60,6 +66,38 @@ namespace PhillipVoyle.RemoteQuery.Tests
             var data = testDataQuery.Where(t => t.TestProperty1.ToLower().Contains("est")).ToArray();
 
             Assert.True(data.Length == 2);
+        }
+
+
+        [Fact]
+        public void OrderByInteger()
+        {
+            var testDataQuery = GetNewQuery();
+            var data = testDataQuery.OrderBy(t => t.TestProperty2).ToArray() //select not implemented
+                .Select(t => t.TestProperty2).ToArray();
+
+            Assert.True(data.Length == 3);
+            Assert.Equal(data, new int[]
+            {
+                12,
+                8921,
+                76789
+            });
+        }
+        [Fact]
+        public void OrderByIntegerDesc()
+        {
+            var testDataQuery = GetNewQuery();
+            var data = testDataQuery.OrderByDescending(t => t.TestProperty2).ToArray() //select not implemented
+                .Select(t => t.TestProperty2).ToArray();
+
+            Assert.True(data.Length == 3);
+            Assert.Equal(data, new int[]
+            {
+                76789,
+                8921,
+                12
+            });
         }
     }
 }
