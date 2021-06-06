@@ -176,52 +176,57 @@ namespace PhillipVoyle.RemoteQuery
                 var gT = genericType.GetGenericArguments()[genericParameter];
                 var aT = specificArgs[genericParameter];
 
-                if (gT.IsGenericMethodParameter)
+                return UnifyType(scope, gT, aT,
+                    scope => UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation));
+            }
+        }
+
+        public IEnumerable<MethodInfo> UnifyType(GenericScope scope, Type tGeneric, Type tSpecific, Func<GenericScope, IEnumerable<MethodInfo>> continuation)
+        {
+
+            if (tGeneric.IsGenericMethodParameter)
+            {
+                if (scope.TryGetValue(tGeneric, out Type unifiedType))
                 {
-                    if (scope.TryGetValue(gT, out Type unifiedType))
+                    if (unifiedType.IsAssignableFrom(tSpecific))
                     {
-                        if (unifiedType.IsAssignableFrom(aT))
-                        {
-                            return UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation);
-                        }
-                        else
-                        {
-                            return Enumerable.Empty<MethodInfo>();
-                        }
+
+                        return continuation(scope);
                     }
                     else
                     {
-                        if (scope.TryUnifyType(gT, aT))
-                        {
-                            return UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation);
-                        }
-                        else
-                        {
-                            //todo: unify implemented types?
-                            return Enumerable.Empty<MethodInfo>();
-                        }
+                        return Enumerable.Empty<MethodInfo>();
                     }
-                }
-                else if (gT.IsAssignableFrom(aT))
-                {
-                    return UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation);
-                }
-                else if (gT.ContainsGenericParameters)
-                {
-                    if (gT.Name != aT.Name)
-                        return Enumerable.Empty<MethodInfo>();
-
-                    if (gT.GetGenericArguments().Length != aT.GetGenericArguments().Length)
-                        return Enumerable.Empty<MethodInfo>();
-
-                    return UnifyGenericParameters(scope, gT, 0, aT.GetGenericArguments(),
-                        (GenericScope s) => UnifyGenericParameters(scope, genericType, genericParameter + 1, specificArgs, continuation));
                 }
                 else
                 {
-                    return Enumerable.Empty<MethodInfo>();
+                    if (scope.TryUnifyType(tGeneric, tSpecific))
+                    {
+                        return continuation(scope);
+                    }
+                    else
+                    {
+                        //todo: unify implemented types?
+                        return Enumerable.Empty<MethodInfo>();
+                    }
                 }
             }
+            else if (tGeneric.IsAssignableFrom(tSpecific))
+            {
+                return continuation(scope);
+            }
+            else if (tGeneric.ContainsGenericParameters)
+            {
+                if (tGeneric.Name != tSpecific.Name)
+                    return Enumerable.Empty<MethodInfo>();
+
+                if (tGeneric.GetGenericArguments().Length != tSpecific.GetGenericArguments().Length)
+                    return Enumerable.Empty<MethodInfo>();
+
+                return UnifyGenericParameters(scope, tGeneric, 0, tSpecific.GetGenericArguments(), continuation);
+            }
+
+            return Enumerable.Empty<MethodInfo>();
         }
 
         public IEnumerable<MethodInfo> UnifyMethodParameters(GenericScope scope, int nParameter, MethodInfo method, Type[] argTypes)
@@ -252,50 +257,9 @@ namespace PhillipVoyle.RemoteQuery
                 var parameter = method.GetParameters()[nParameter];
                 var parameterType = parameter.ParameterType;
                 var argumentType = argTypes[nParameter];
-                if (parameter.ParameterType.IsGenericMethodParameter)
-                {
-                    if (scope.TryGetValue(parameterType, out Type unifiedType))
-                    {
-                        if (unifiedType.IsAssignableFrom(argumentType))
-                        {
-                            return UnifyMethodParameters(scope, nParameter + 1, method, argTypes);
-                        }
-                        else
-                        {
-                            return Enumerable.Empty<MethodInfo>();
-                        }
-                    }
-                    else
-                    {
-                        if (scope.TryUnifyType(parameterType, argumentType))
-                        {
-                            return UnifyMethodParameters(scope, nParameter + 1, method, argTypes);
-                        }
-                        else
-                        {
-                            //todo: unify implemented types?
-                            return Enumerable.Empty<MethodInfo>();
-                        }
-                    }
-                }
-                else if(parameter.ParameterType.IsAssignableFrom(argumentType))
-                {
-                    return UnifyMethodParameters(scope, nParameter + 1, method, argTypes);
-                }
-                else if (parameterType.ContainsGenericParameters)
-                {
-                    if (parameterType.Name != argumentType.Name)
-                        return Enumerable.Empty<MethodInfo>();
-
-                    if (parameterType.GetGenericArguments().Length != argumentType.GetGenericArguments().Length)
-                        return Enumerable.Empty<MethodInfo>();
-
-                    return UnifyGenericParameters(scope, parameterType, 0, argumentType.GetGenericArguments(),
-                        (GenericScope s) => UnifyMethodParameters(scope, nParameter + 1, method, argTypes));
-                }
+                return UnifyType(scope, parameterType, argumentType, scope => UnifyMethodParameters(scope, nParameter + 1, method, argTypes));
             }
-
-            return Enumerable.Empty<MethodInfo>();
+            
         }
         public IEnumerable<MethodInfo> CheckParameters(MethodInfo method, Type[] argumentTypes)
         {
